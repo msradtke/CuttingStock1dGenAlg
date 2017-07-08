@@ -85,7 +85,7 @@ namespace CuttingStock1dGA.Models
                 segmentCount += kvp.Value;
                 segments.Add(kvp.Key, segmentCount);
             }
-
+        
             Random r = new Random();
             r.NextDouble();
 
