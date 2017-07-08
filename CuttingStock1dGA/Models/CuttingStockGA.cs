@@ -14,6 +14,73 @@ namespace CuttingStock1dGA.Models
         List<double> _items;
         double _master = 96;
         Dictionary<double, int> _demand;
+        List<PatternDemand> _patternDemands;
+        double additionalPatternSelection = .10;
+        Solution _dominator;
+        public void UseSampleData()
+        {
+            _demand = SampleData.GetSampleData1();
+            _items = _demand.Keys.ToList();
+            _population = 10;
+            _master = SampleData.MasterLength1;
+
+        }
+        public void Process()
+        {
+            _patternDemands = new List<PatternDemand>();
+            _solutions = new List<Solution>();
+
+            UseSampleData();
+            for (int i = 0; i < _population - 1; ++i)
+            {
+                var rpd = RandomPatternWithDemandMatching(new Dictionary<double, int>(_demand));
+                _solutions.Add(new Solution { PatternDemands = rpd });
+            }
+
+            var pd = FirstFitDecreasing(new Dictionary<double, int>(_demand));
+            _solutions.Add(new Solution { PatternDemands = pd });
+            SetRanks();
+            CalcAllFitness();
+            if (_solutions.Count(x => x.Rank == 1) == 1)
+                _dominator = _solutions.Where(x => x.Rank == 1).FirstOrDefault();
+
+            for (int i = 0; i < 50; ++i)
+            {
+
+                var child = CreateOffspring();
+                _solutions.Add(child);
+                SetRanks();
+                var lowestRanked = _solutions.OrderByDescending(x => x.Rank).FirstOrDefault();
+                if(child.Rank == lowestRanked.Rank)
+                    _solutions.Remove(child);
+                else
+                    _solutions.Remove(lowestRanked);
+
+                CheckIfNewSolutionIsBest(child);
+                SetRanks();
+                CalcAllFitness();
+            }
+        }
+        void CheckIfNewSolutionIsBest(Solution child)
+        {
+            if (!_solutions.Contains(child))
+            {
+                Console.WriteLine("Not added");
+                return;
+            }
+            else if (child.Rank == 1)
+            {
+                Console.WriteLine("New non-dominated");
+                if (_solutions.Count(x => x.Rank == 1) == 1)
+                {
+                    _dominator = child;
+                    Console.WriteLine("New dominator");
+                }
+            }
+            Console.WriteLine("Rank: {0}", child.Rank);
+            Console.WriteLine("Stock Used: {0}", child.StockUsed);
+            Console.WriteLine("Pattern Count: {0}", child.PatternCount);
+        }
         public CuttingStockGA()
         {
 
@@ -33,9 +100,11 @@ namespace CuttingStock1dGA.Models
                 if (sol != s)
                 {
                     if (sol.GetStockUsed() < stockUsed)
+                    {
                         if (sol.GetPatternCount() <= patternCount)
                             s.Rank += 1;
-                    if (sol.GetStockUsed() <= stockUsed)
+                    }
+                    else if (sol.GetStockUsed() <= stockUsed)
                         if (sol.GetPatternCount() < patternCount)
                             s.Rank += 1;
                 }
@@ -66,7 +135,7 @@ namespace CuttingStock1dGA.Models
         }
         void CalcFinalFitness(Solution solution)
         {
-            solution.FinalFitness = solution.FinalFitness; //temporary
+            solution.FinalFitness = solution.InitialFitness; //temporary
         }
         Func<Solution> GetSelectParentFn()
         {
@@ -105,23 +174,28 @@ namespace CuttingStock1dGA.Models
             return ReturnParent;
         }
 
-        List<double> FFDGetPattern(double remainingMasterLength, Dictionary<double, int> residualDemand)
+        Pattern FFDGetPattern(double remainingMasterLength, Dictionary<double, int> residualDemand)
         {
-            List<double> pattern = new List<double>();
+            Pattern pattern = new Pattern();
+            pattern.Items = new List<double>();
+
             var sortedItems = _items.OrderByDescending(x => x);
 
-            if (remainingMasterLength > sortedItems.Last())
+            if (remainingMasterLength < sortedItems.Last())
                 return pattern;
 
             foreach (var item in sortedItems)
             {
                 if (remainingMasterLength < item)
                     continue;
+                if (remainingMasterLength < sortedItems.Last())
+                    return pattern;
+
 
                 int demandLeft = residualDemand[item];
                 if (demandLeft == 0)
                     continue;
-                int maxItem = Convert.ToInt32(remainingMasterLength / item);
+                int maxItem = (int)(remainingMasterLength / item);
 
                 if (maxItem > demandLeft)
                 {
@@ -130,7 +204,7 @@ namespace CuttingStock1dGA.Models
 
                 for (int i = 0; i < maxItem; ++i)
                 {
-                    pattern.Add(item);
+                    pattern.Items.Add(item);
                     remainingMasterLength -= item;
                 }
             }
@@ -138,29 +212,39 @@ namespace CuttingStock1dGA.Models
             return pattern;
         }
 
-        void FirstFitDecreasing()
+        List<PatternDemand> FirstFitDecreasing(Dictionary<double, int> residualDemand)
         {
-            var residualDemand = new Dictionary<double, int>(_demand);
             List<double> patterns = new List<double>();
-
+            var solution = new Solution();
+            List<PatternDemand> patternDemands = new List<PatternDemand>();
             var demandMet = false;
             while (!demandMet)
             {
                 var pattern = FFDGetPattern(_master, residualDemand);
-                if (pattern.Count == 0)
+                if (pattern.Items.Count == 0)
                 {
                     demandMet = true;
                     break;
                 }
 
-                foreach (var cut in pattern)
-                    residualDemand[cut]--;
+                var patternCount = GetMaxCutsFromPatternAndDemand(pattern, residualDemand);
+                DeductDemand(patternCount, pattern, residualDemand);
+                patternDemands.Add(new PatternDemand { Pattern = pattern, Demand = patternCount });
             }
 
+            return patternDemands;
+        }
+        void DeductDemand(int count, Pattern pattern, Dictionary<double, int> demand)
+        {
+            var uniqueCuts = pattern.Items.Distinct();
+            foreach (var cut in uniqueCuts)
+            {
+                var cutCount = pattern.Items.Count(x => x == cut);
+                demand[cut] -= cutCount * count;
+            }
         }
         int GetMaxCutsFromPatternAndDemand(Pattern pattern, Dictionary<double, int> demand)
         {
-            
             var uniqueCuts = pattern.Items.Distinct();
             int count = int.MaxValue;
             foreach (var cut in uniqueCuts)
@@ -168,12 +252,163 @@ namespace CuttingStock1dGA.Models
                 var cutCount = pattern.Items.Count(x => x == cut);
                 var max = demand[cut];
 
-                var countBuff = Convert.ToInt32(max / cutCount);
+                var countBuff = max / cutCount;
                 if (countBuff < count)
                     count = countBuff;
             }
-
             return count;
         }
+
+
+        List<PatternDemand> RandomPatternWithDemandMatching(Dictionary<double, int> residualDemand)
+        {
+            List<PatternDemand> patternDemands = new List<PatternDemand>();
+            var items = residualDemand.Keys.ToList();
+
+            var remainingLength = _master;
+
+            bool demandMet = false;
+            while (!demandMet)
+            {
+                var pattern = GetPatternForRandom(_master, residualDemand);
+                if (pattern.Items.Count == 0)
+                {
+                    demandMet = true;
+                    break;
+                }
+
+                var demand = GetMaxCutsFromPatternAndDemand(pattern, residualDemand);
+                DeductDemand(demand, pattern, residualDemand);
+
+                patternDemands.Add(new PatternDemand { Demand = demand, Pattern = pattern });
+
+
+            }
+            return patternDemands;
+        }
+
+        Pattern GetPatternForRandom(double masterLength, Dictionary<double, int> residualDemand)
+        {
+            Pattern p = new Pattern();
+            p.Items = new List<double>();
+
+            List<int> indexUsed = new List<int>();
+            var items = residualDemand.Keys.ToList();
+            bool usableItemRemains = true;
+            var remainingLength = masterLength;
+            while (usableItemRemains)
+            {
+                var availDemands = residualDemand.Where(x => x.Value > 0);
+                var minAvailableLength = availDemands.OrderBy(x => x.Key).FirstOrDefault().Key;
+
+                if (remainingLength < minAvailableLength)
+                {
+                    usableItemRemains = false;
+                    break;
+                }
+
+                Random IndexRandom = new Random();
+                Random percentRandom = new Random();
+                var percent = percentRandom.Next(10, 100);
+                percent = percent / 100;
+                var index = IndexRandom.Next(0, residualDemand.Count);
+                var item = items[index];
+
+                if (indexUsed.Contains(index))
+                    continue;
+
+                indexUsed.Add(index);
+
+                int countToUse = 0;
+                var remaining = residualDemand[item];
+                var maxFitInPattern = (int)(remainingLength / item);
+                var percentageUsage = percent * remaining;
+
+                if (maxFitInPattern > remaining)
+                    maxFitInPattern = remaining;
+
+                countToUse = maxFitInPattern;
+
+                if (percentageUsage >= 1)
+                    if (percentageUsage < maxFitInPattern)
+                        countToUse = percentageUsage;
+                for (int i = 0; i < countToUse; ++i)
+                {
+                    p.Items.Add(item);
+                    remainingLength -= item;
+                }
+
+
+                if (indexUsed.Count == items.Count)
+                    usableItemRemains = false;
+            }
+            return p;
+        }
+
+        Solution CreateOffspring()
+        {
+            var selectedParentFunc = GetSelectParentFn();
+
+            var unusablePatterns = new List<Pattern>();
+
+            var averagePatternCount = _solutions.Average(x => x.PatternCount);
+            int maxPatternCount = (int)(averagePatternCount * additionalPatternSelection + averagePatternCount);
+            //testing
+            //maxPatternCount /= 2; //test
+
+            var child = new Solution();
+            child.PatternDemands = new List<PatternDemand>();
+
+            var residualDemand = new Dictionary<double, int>(_demand);
+
+            var parent = selectedParentFunc();
+            var parentPatterns = parent.Patterns;
+            var parentPatternCount = parent.PatternCount;
+            bool demandIsMet = false;
+            while (child.PatternCount < maxPatternCount)
+            {
+                if (unusablePatterns.Count == parentPatternCount)
+                    break;
+                var r = new Random();
+                var patternIndex = r.Next(0, parentPatternCount);
+                var pattern = parentPatterns[patternIndex];
+                var maxCuts = 0;
+                if (!unusablePatterns.Contains(pattern))
+                {
+                    unusablePatterns.Add(pattern);
+                    maxCuts = GetMaxCutsFromPatternAndDemand(pattern, residualDemand);
+                }
+
+                if (maxCuts == 0)
+                    continue;
+                else
+                {
+                    child.PatternDemands.Add(new PatternDemand { Demand = maxCuts, Pattern = pattern });
+                    DeductDemand(maxCuts, pattern, residualDemand);
+                }
+                if (IsDemandMet(residualDemand))
+                {
+                    demandIsMet = true;
+                    break;
+                }
+            }
+
+            if (!demandIsMet)
+            {
+                var pdemands = FirstFitDecreasing(residualDemand);
+                child.PatternDemands.AddRange(pdemands);
+
+            }
+            return child;
+        }
+
+        bool IsDemandMet(Dictionary<double, int> demand)
+        {
+
+            if (demand.Count(x => x.Value > 0) == 0)
+                return true;
+            return false;
+        }
+
     }
 }

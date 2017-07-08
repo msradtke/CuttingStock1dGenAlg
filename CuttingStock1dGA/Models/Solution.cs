@@ -13,6 +13,7 @@ namespace CuttingStock1dGA.Models
         public int SameRankCount { get; set; }
         public double InitialFitness { get; set; }
         public double FinalFitness { get; set; }
+        public List<PatternDemand> PatternDemands { get; set; }
         public Solution()
         {
 
@@ -20,11 +21,28 @@ namespace CuttingStock1dGA.Models
 
         public int GetStockUsed()
         {
-            return 0;
+            return PatternDemands.Sum(x => x.Demand);
         }
         public int GetPatternCount()
         {
-            return 0;
+            
+            return PatternDemands.Count();
+        }
+
+        public int StockUsed
+        {
+            get { return GetStockUsed(); }
+        }
+        public int PatternCount
+        {
+            get { return GetPatternCount(); }
+        }
+
+        public List<Pattern> Patterns
+        {
+            get { return PatternDemands.Select(x=>x.Pattern).ToList(); }
         }
     }
+
+
 }

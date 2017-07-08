@@ -12,7 +12,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
-
+using CuttingStock1dGA.Models;
 namespace CuttingStock1dGA
 {
     /// <summary>
@@ -23,6 +23,9 @@ namespace CuttingStock1dGA
         public MainWindow()
         {
             InitializeComponent();
+
+            CuttingStockGA cs = new CuttingStockGA();
+            cs.Process();
         }
     }
 }

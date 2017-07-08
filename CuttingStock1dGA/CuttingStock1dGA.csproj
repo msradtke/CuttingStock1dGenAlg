@@ -70,6 +70,8 @@
   <ItemGroup>
     <Compile Include="Models\CuttingStockGA.cs" />
     <Compile Include="Models\Pattern.cs" />
+    <Compile Include="Models\PatternDemand.cs" />
+    <Compile Include="Models\SampleData.cs" />
     <Compile Include="Models\Solution.cs" />
     <Compile Include="Properties\AssemblyInfo.cs">
       <SubType>Code</SubType>
