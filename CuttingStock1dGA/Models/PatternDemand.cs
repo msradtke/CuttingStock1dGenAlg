@@ -10,5 +10,6 @@ namespace CuttingStock1dGA.Models
     {
         public Pattern Pattern { get; set; }
         public int Demand { get; set; }
+        public double StockLength { get; set; }
     }
 }

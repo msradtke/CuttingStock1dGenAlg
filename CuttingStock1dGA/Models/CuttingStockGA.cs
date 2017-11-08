@@ -7,38 +7,62 @@ using System.Threading.Tasks;
 
 namespace CuttingStock1dGA.Models
 {
-    class CuttingStockGA
+    public class CuttingStockGA
     {
         List<Solution> _solutions;
         int _population;
         List<double> _items;
-        double _master = 96;
+        //double _master = 96;
+        List<double> _masters;
         Dictionary<double, int> _demand;
         List<PatternDemand> _patternDemands;
         double additionalPatternSelection = .10;
+        double mutateChance = .1;
         Solution _dominator;
         public void UseSampleData()
         {
             _demand = SampleData.GetSampleData1();
             _items = _demand.Keys.ToList();
             _population = 10;
-            _master = SampleData.MasterLength1;
+            //_master = SampleData.MasterLength1;
 
+        }
+        public List<Solution> Process(Dictionary<double, int> demand, List<double> masters, int population)
+        {
+            _solutions = new List<Solution>();
+            if (demand.Count <= 0)
+                return _solutions;
+            if (demand.Keys.Sum() <= 0)
+                return _solutions;
+            if (demand.Values.Sum() <= 0)
+                return _solutions;
+
+            _demand = demand;
+            _items = _demand.Keys.ToList();
+            _population = population;
+
+            _masters = masters;
+            Process();
+            return _solutions.OrderBy(x => x.Rank).ToList();
         }
         public void Process()
         {
             _patternDemands = new List<PatternDemand>();
             _solutions = new List<Solution>();
 
-            UseSampleData();
-            for (int i = 0; i < _population - 1; ++i)
+
+
+            foreach (var master in _masters)
+            {
+                var pd = FirstFitDecreasing(new Dictionary<double, int>(_demand), master);
+                _solutions.Add(new Solution { PatternDemands = pd });
+
+            }
+            while (_solutions.Count < _population)
             {
                 var rpd = RandomPatternWithDemandMatching(new Dictionary<double, int>(_demand));
                 _solutions.Add(new Solution { PatternDemands = rpd });
             }
-
-            var pd = FirstFitDecreasing(new Dictionary<double, int>(_demand));
-            _solutions.Add(new Solution { PatternDemands = pd });
             SetRanks();
             CalcAllFitness();
             if (_solutions.Count(x => x.Rank == 1) == 1)
@@ -51,7 +75,7 @@ namespace CuttingStock1dGA.Models
                 _solutions.Add(child);
                 SetRanks();
                 var lowestRanked = _solutions.OrderByDescending(x => x.Rank).FirstOrDefault();
-                if(child.Rank == lowestRanked.Rank)
+                if (child.Rank == lowestRanked.Rank)
                     _solutions.Remove(child);
                 else
                     _solutions.Remove(lowestRanked);
@@ -59,7 +83,24 @@ namespace CuttingStock1dGA.Models
                 CheckIfNewSolutionIsBest(child);
                 SetRanks();
                 CalcAllFitness();
+
             }
+
+
+        }
+
+        void Mutate()
+        {
+            var ran = new Random();
+            if(ran.NextDouble() < mutateChance)
+            {
+
+            }
+        }
+        List<Pattern> GetBestPatterns()
+        {
+            var allPatterns = _solutions.SelectMany(x => x.PatternDemands);
+            var orderedPatterns = allPatterns.OrderBy(x => x.StockLength - x.Pattern.Items.Sum()); //waste getting bigger
         }
         void CheckIfNewSolutionIsBest(Solution child)
         {
@@ -90,25 +131,66 @@ namespace CuttingStock1dGA.Models
             foreach (var s in _solutions)
                 Rank(s);
         }
-        void Rank(Solution s)
+        void Rank(Solution subjectSol)
         {
-            s.Rank = 1;
-            var stockUsed = s.GetStockUsed();
-            var patternCount = s.GetPatternCount();
-            foreach (var sol in _solutions)
+            subjectSol.Rank = 1;
+            var stockUsed = subjectSol.GetTotalMasterLengthUsage();
+            var patternCount = subjectSol.GetPatternCount();
+
+            var score = ScoreSolution(subjectSol);
+            foreach (var otherSol in _solutions) //test to see if OTHER sol has no worse (ranking) and at least 1 is better, then THIS sol rank++ (ranked worse)
             {
-                if (sol != s)
+                if (otherSol != subjectSol)
                 {
-                    if (sol.GetStockUsed() < stockUsed)
+                    var otherScore = ScoreSolution(otherSol);
+                    if (otherScore < score)
                     {
-                        if (sol.GetPatternCount() <= patternCount)
-                            s.Rank += 1;
+                        subjectSol.Rank += 1;
                     }
-                    else if (sol.GetStockUsed() <= stockUsed)
-                        if (sol.GetPatternCount() < patternCount)
-                            s.Rank += 1;
                 }
             }
+
+            /*
+            foreach (var otherSol in _solutions) //test to see if OTHER sol has no worse (ranking) and at least 1 is better, then THIS sol rank++ (ranked worse)
+            {
+                if (otherSol != subjectSol)
+                {
+                    if (otherSol.GetTotalMasterLengthUsage() < stockUsed)
+                    {
+                        if (otherSol.GetPatternCount() <= patternCount)
+                            subjectSol.Rank += 1;
+                    }
+                    //else if (otherSol.GetTotalMasterLengthUsage() == stockUsed)
+                    // if (otherSol.GetPatternCount() < patternCount)
+                    //subjectSol.Rank += 1;
+                }
+            }
+            */
+        }
+
+        double ScoreSolution(Solution subjectSol) //higher score is better
+        {
+            
+            var avgCutTypePerPattern = subjectSol.Patterns.Average(x => x.Items.Distinct().Count());
+            var sumLengthOfMasters = subjectSol.GetTotalMasterLengthUsage();
+            var patternCount = subjectSol.GetPatternCount();
+
+            var totalAvgCutTypePerPattern = _solutions.Sum(x => x.Patterns.Average(y => y.Items.Distinct().Count()));
+            var totalSumLengthOfMasters = _solutions.Sum(x => x.GetTotalMasterLengthUsage());
+            var totalPatternCount = _solutions.Sum(x => x.GetPatternCount());
+
+            //weight of each
+
+            double avgCutTypeWeight = .5;
+            double totalLengthOfMastersWeight = .3;
+            double patternCountWeight = 1 - avgCutTypeWeight - totalLengthOfMastersWeight;
+
+            var score = ((avgCutTypePerPattern / totalAvgCutTypePerPattern) * avgCutTypeWeight) +
+                (sumLengthOfMasters / totalSumLengthOfMasters) * totalLengthOfMastersWeight +
+                (patternCount / totalPatternCount) * patternCountWeight;
+
+            return score;
+
         }
         void CalcAllFitness()
         {
@@ -212,7 +294,7 @@ namespace CuttingStock1dGA.Models
             return pattern;
         }
 
-        List<PatternDemand> FirstFitDecreasing(Dictionary<double, int> residualDemand)
+        List<PatternDemand> FirstFitDecreasing(Dictionary<double, int> residualDemand, double masterLength)
         {
             List<double> patterns = new List<double>();
             var solution = new Solution();
@@ -220,7 +302,7 @@ namespace CuttingStock1dGA.Models
             var demandMet = false;
             while (!demandMet)
             {
-                var pattern = FFDGetPattern(_master, residualDemand);
+                var pattern = FFDGetPattern(masterLength, residualDemand);
                 if (pattern.Items.Count == 0)
                 {
                     demandMet = true;
@@ -229,7 +311,7 @@ namespace CuttingStock1dGA.Models
 
                 var patternCount = GetMaxCutsFromPatternAndDemand(pattern, residualDemand);
                 DeductDemand(patternCount, pattern, residualDemand);
-                patternDemands.Add(new PatternDemand { Pattern = pattern, Demand = patternCount });
+                patternDemands.Add(new PatternDemand { Pattern = pattern, Demand = patternCount, StockLength = masterLength });
             }
 
             return patternDemands;
@@ -264,13 +346,13 @@ namespace CuttingStock1dGA.Models
         {
             List<PatternDemand> patternDemands = new List<PatternDemand>();
             var items = residualDemand.Keys.ToList();
-
-            var remainingLength = _master;
+            var master = GetRandomMaster();
+            var remainingLength = master;
 
             bool demandMet = false;
             while (!demandMet)
             {
-                var pattern = GetPatternForRandom(_master, residualDemand);
+                var pattern = GetPatternForRandom(master, residualDemand);
                 if (pattern.Items.Count == 0)
                 {
                     demandMet = true;
@@ -280,7 +362,7 @@ namespace CuttingStock1dGA.Models
                 var demand = GetMaxCutsFromPatternAndDemand(pattern, residualDemand);
                 DeductDemand(demand, pattern, residualDemand);
 
-                patternDemands.Add(new PatternDemand { Demand = demand, Pattern = pattern });
+                patternDemands.Add(new PatternDemand { Demand = demand, Pattern = pattern, StockLength = master });
 
 
             }
@@ -358,11 +440,13 @@ namespace CuttingStock1dGA.Models
 
             var child = new Solution();
             child.PatternDemands = new List<PatternDemand>();
+            var master = GetRandomMaster();
 
             var residualDemand = new Dictionary<double, int>(_demand);
 
             var parent = selectedParentFunc();
-            var parentPatterns = parent.Patterns;
+
+            var parentPatterns = parent.PatternDemands;
             var parentPatternCount = parent.PatternCount;
             bool demandIsMet = false;
             while (child.PatternCount < maxPatternCount)
@@ -373,18 +457,18 @@ namespace CuttingStock1dGA.Models
                 var patternIndex = r.Next(0, parentPatternCount);
                 var pattern = parentPatterns[patternIndex];
                 var maxCuts = 0;
-                if (!unusablePatterns.Contains(pattern))
+                if (!unusablePatterns.Contains(pattern.Pattern))
                 {
-                    unusablePatterns.Add(pattern);
-                    maxCuts = GetMaxCutsFromPatternAndDemand(pattern, residualDemand);
+                    unusablePatterns.Add(pattern.Pattern);
+                    maxCuts = GetMaxCutsFromPatternAndDemand(pattern.Pattern, residualDemand);
                 }
 
                 if (maxCuts == 0)
                     continue;
                 else
                 {
-                    child.PatternDemands.Add(new PatternDemand { Demand = maxCuts, Pattern = pattern });
-                    DeductDemand(maxCuts, pattern, residualDemand);
+                    child.PatternDemands.Add(new PatternDemand { Demand = maxCuts, Pattern = pattern.Pattern, StockLength = pattern.StockLength });
+                    DeductDemand(maxCuts, pattern.Pattern, residualDemand);
                 }
                 if (IsDemandMet(residualDemand))
                 {
@@ -395,13 +479,18 @@ namespace CuttingStock1dGA.Models
 
             if (!demandIsMet)
             {
-                var pdemands = FirstFitDecreasing(residualDemand);
+                var pdemands = FirstFitDecreasing(residualDemand, GetRandomMaster());
                 child.PatternDemands.AddRange(pdemands);
 
             }
             return child;
         }
-
+        double GetRandomMaster()
+        {
+            var ran = new Random();
+            var index = ran.Next(0, _masters.Count);
+            return _masters[index];
+        }
         bool IsDemandMet(Dictionary<double, int> demand)
         {
 

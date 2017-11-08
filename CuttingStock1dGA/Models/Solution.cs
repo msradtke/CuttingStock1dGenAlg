@@ -18,10 +18,14 @@ namespace CuttingStock1dGA.Models
         {
 
         }
-
         public int GetStockUsed()
         {
             return PatternDemands.Sum(x => x.Demand);
+        }
+        public double GetTotalMasterLengthUsage()
+        {
+            var total = PatternDemands.Sum(x => x.Demand * x.StockLength);
+            return total;
         }
         public int GetPatternCount()
         {
@@ -31,7 +35,7 @@ namespace CuttingStock1dGA.Models
 
         public int StockUsed
         {
-            get { return GetStockUsed(); }
+            get { return PatternDemands.Sum(x => x.Demand); }
         }
         public int PatternCount
         {
