@@ -8,6 +8,14 @@ namespace CuttingStock1dGA.Models
 {
     public class Pattern
     {
+        public Pattern()
+        {
+
+        }
+        public Pattern(Pattern p)
+        {
+            Items = new List<double>(p.Items);
+        }
         public List<double> Items { get; set; }
     }
 }

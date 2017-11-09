@@ -18,6 +18,7 @@ namespace CuttingStock1dGA.Models
         List<PatternDemand> _patternDemands;
         double additionalPatternSelection = .10;
         double mutateChance = .1;
+        int _bestPatternCount = 3;
         Solution _dominator;
         public void UseSampleData()
         {
@@ -80,6 +81,9 @@ namespace CuttingStock1dGA.Models
                 else
                     _solutions.Remove(lowestRanked);
 
+                Mutate();
+
+
                 CheckIfNewSolutionIsBest(child);
                 SetRanks();
                 CalcAllFitness();
@@ -94,13 +98,56 @@ namespace CuttingStock1dGA.Models
             var ran = new Random();
             if(ran.NextDouble() < mutateChance)
             {
+                var bestPatterns = GetBestPatterns();
+                var index = ran.Next(0, _bestPatternCount);
+                var pattern = new PatternDemand(bestPatterns[index]);
 
+                index = ran.Next(0, _solutions.Count);
+                var solution = _solutions[index];
+
+                index = ran.Next(0, solution.PatternDemands.Count);
+                var oldPattern = solution.PatternDemands[index];
+                solution.Patterns.Remove(oldPattern.Pattern);
+                solution.PatternDemands.Remove(oldPattern);
+
+                solution.PatternDemands.Insert(0,pattern);
+
+                RepairSolution(solution);
             }
         }
-        List<Pattern> GetBestPatterns()
+        void RepairSolution(Solution solution)
+        {
+            var newPatternDemands = new List<PatternDemand>();
+            var removePatternDemands = new List<PatternDemand>();
+            var residualDemand = new Dictionary<double, int>(_demand);
+            foreach (var pattern in solution.PatternDemands)
+            {
+                var maxCuts = GetMaxCutsFromPatternAndDemand(pattern.Pattern, residualDemand);
+                if (maxCuts == 0)
+                {
+                    removePatternDemands.Add(pattern);
+                    continue;
+                }
+                DeductDemand(maxCuts, pattern.Pattern, residualDemand);
+                var pd = new PatternDemand { Pattern = pattern.Pattern, Demand = pattern.Demand, StockLength = pattern.StockLength };
+                newPatternDemands.Add(pd);
+            }
+            foreach (var remove in removePatternDemands)
+                newPatternDemands.Remove(remove);
+
+            if (!IsDemandMet(residualDemand))
+            {               
+                var pdemands = FirstFitDecreasing(residualDemand, GetRandomMaster());
+                newPatternDemands.AddRange(pdemands);
+            }
+            solution.PatternDemands = newPatternDemands;        
+        }
+        List<PatternDemand> GetBestPatterns()
         {
             var allPatterns = _solutions.SelectMany(x => x.PatternDemands);
             var orderedPatterns = allPatterns.OrderBy(x => x.StockLength - x.Pattern.Items.Sum()); //waste getting bigger
+            var bestPatterns = orderedPatterns.Take(_bestPatternCount);
+            return bestPatterns.ToList();
         }
         void CheckIfNewSolutionIsBest(Solution child)
         {
