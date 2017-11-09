@@ -16,8 +16,8 @@ namespace CuttingStock1dGA.Models
         List<double> _masters;
         Dictionary<double, int> _demand;
         List<PatternDemand> _patternDemands;
-        double additionalPatternSelection = .10;
-        double mutateChance = .1;
+        double additionalPatternSelection = .20;
+        double mutateChance = 1;
         int _bestPatternCount = 3;
         Solution _dominator;
         public void UseSampleData()
@@ -97,21 +97,27 @@ namespace CuttingStock1dGA.Models
         void Mutate()
         {
             var ran = new Random();
-            if(ran.NextDouble() < mutateChance)
+            if (ran.NextDouble() < mutateChance)
             {
                 var bestPatterns = GetBestPatterns();
-                var index = ran.Next(0, _bestPatternCount);
-                var pattern = new PatternDemand(bestPatterns[index]);
+                if (bestPatterns.Count == 0)
+                    return;
+
+                var index = ran.Next(0, bestPatterns.Count);
+                var bestPattern = new PatternDemand(bestPatterns[index]);
+
 
                 index = ran.Next(0, _solutions.Count);
                 var solution = _solutions[index];
 
                 index = ran.Next(0, solution.PatternDemands.Count);
-                var oldPattern = solution.PatternDemands[index];
-                solution.Patterns.Remove(oldPattern.Pattern);
-                solution.PatternDemands.Remove(oldPattern);
 
-                solution.PatternDemands.Insert(0,pattern);
+                var worstPattern = solution.PatternDemands.OrderByDescending(x => x.StockLength - x.Pattern.Items.Sum()).FirstOrDefault();
+                //var oldPattern = solution.PatternDemands[index];
+                solution.Patterns.Remove(worstPattern.Pattern);
+                solution.PatternDemands.Remove(worstPattern);
+
+                solution.PatternDemands.Insert(0, bestPattern);
 
                 RepairSolution(solution);
             }
@@ -137,18 +143,32 @@ namespace CuttingStock1dGA.Models
                 newPatternDemands.Remove(remove);
 
             if (!IsDemandMet(residualDemand))
-            {               
+            {
                 var pdemands = FirstFitDecreasing(residualDemand, GetRandomMaster());
                 newPatternDemands.AddRange(pdemands);
             }
-            solution.PatternDemands = newPatternDemands;        
+            solution.PatternDemands = newPatternDemands;
         }
         List<PatternDemand> GetBestPatterns()
         {
             var allPatterns = _solutions.SelectMany(x => x.PatternDemands);
             var orderedPatterns = allPatterns.OrderBy(x => x.StockLength - x.Pattern.Items.Sum()); //waste getting bigger
-            var bestPatterns = orderedPatterns.Take(_bestPatternCount);
-            return bestPatterns.ToList();
+            var uniquePatterns = new List<PatternDemand>();
+            foreach (var pattern in orderedPatterns)
+            {
+                var comparer = new PatternComparer();
+                var nonUnique = uniquePatterns.FirstOrDefault(x => x.StockLength == pattern.StockLength && comparer.Equals(pattern.Pattern,x.Pattern));
+                if (nonUnique == null)
+                    uniquePatterns.Add(pattern);
+            }
+
+            List<PatternDemand> bestPatterns;
+            var uniquePatternsCount = uniquePatterns.Count;
+            if (uniquePatternsCount >= _bestPatternCount)
+                bestPatterns = uniquePatterns.Take(_bestPatternCount).ToList();
+            else
+                bestPatterns = uniquePatterns.Take(uniquePatternsCount).ToList();
+            return bestPatterns;
         }
         void CheckIfNewSolutionIsBest(Solution child)
         {
@@ -218,7 +238,7 @@ namespace CuttingStock1dGA.Models
 
         double ScoreSolution(Solution subjectSol) //higher score is better
         {
-            
+
             var avgCutTypePerPattern = subjectSol.Patterns.Average(x => x.Items.Distinct().Count());
             var sumLengthOfMasters = subjectSol.GetTotalMasterLengthUsage();
             var patternCount = subjectSol.GetPatternCount();

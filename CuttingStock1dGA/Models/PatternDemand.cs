@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace CuttingStock1dGA.Models
 {
-    public class PatternDemand
+    public class PatternDemand : IEquatable<PatternDemand>
     {
         public PatternDemand()
         {
@@ -21,5 +21,16 @@ namespace CuttingStock1dGA.Models
         public Pattern Pattern { get; set; }
         public int Demand { get; set; }
         public double StockLength { get; set; }
+
+        public bool Equals(PatternDemand other)
+        {
+            if (!Pattern.Equals(other.Pattern))
+                return false;
+            if (StockLength != other.StockLength)
+                return false;
+            if (Demand != other.Demand)
+                return false;
+            return true;
+        }
     }
 }
