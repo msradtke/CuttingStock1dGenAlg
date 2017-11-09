@@ -30,6 +30,7 @@ namespace CuttingStock1dGA.Models
         }
         public List<Solution> Process(Dictionary<double, int> demand, List<double> masters, int population)
         {
+            //testing
             _solutions = new List<Solution>();
             if (demand.Count <= 0)
                 return _solutions;
