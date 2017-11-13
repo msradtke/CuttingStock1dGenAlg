@@ -4,7 +4,6 @@ using System.Collections;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-
 namespace CuttingStock1dGA.Models
 {
     public class CuttingStockGA
@@ -136,7 +135,7 @@ namespace CuttingStock1dGA.Models
                     continue;
                 }
                 DeductDemand(maxCuts, pattern.Pattern, residualDemand);
-                var pd = new PatternDemand { Pattern = pattern.Pattern, Demand = pattern.Demand, StockLength = pattern.StockLength };
+                var pd = new PatternDemand { Pattern = pattern.Pattern, Demand = maxCuts, StockLength = pattern.StockLength };
                 newPatternDemands.Add(pd);
             }
             foreach (var remove in removePatternDemands)
@@ -361,15 +360,23 @@ namespace CuttingStock1dGA.Models
 
             return pattern;
         }
+        List<PatternDemand> FirstFitDecreasing(Dictionary<double, int> residualDemand, double masterLength, Solution solutiong)
+        {
 
+        }
         List<PatternDemand> FirstFitDecreasing(Dictionary<double, int> residualDemand, double masterLength)
         {
             List<double> patterns = new List<double>();
             var solution = new Solution();
             List<PatternDemand> patternDemands = new List<PatternDemand>();
             var demandMet = false;
+            var triedToFillCurrentPatterns = false;
             while (!demandMet)
             {
+                if(!triedToFillCurrentPatterns)
+                {
+                    foreach(var pattern in _so)
+                }
                 var pattern = FFDGetPattern(masterLength, residualDemand);
                 if (pattern.Items.Count == 0)
                 {
@@ -487,8 +494,6 @@ namespace CuttingStock1dGA.Models
                     p.Items.Add(item);
                     remainingLength -= item;
                 }
-
-
                 if (indexUsed.Count == items.Count)
                     usableItemRemains = false;
             }
