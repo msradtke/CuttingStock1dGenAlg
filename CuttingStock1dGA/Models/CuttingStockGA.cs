@@ -142,7 +142,7 @@ namespace CuttingStock1dGA.Models
                 newPatternDemands.Remove(remove);
 
             if (!IsDemandMet(residualDemand))
-                FillSolutionWithFFD(residualDemand, solution);
+                FillSolutionWithFFD(residualDemand, new Solution { PatternDemands = newPatternDemands });
             if (!IsDemandMet(residualDemand))
             {
                 var pdemands = FirstFitDecreasing(residualDemand, GetRandomMaster());
