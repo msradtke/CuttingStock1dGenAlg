@@ -372,16 +372,18 @@ namespace CuttingStock1dGA.Models
                 if (newPattern.Items.Count > 0)
                 {
                     
-                    var maxPatterns = GetMaxCutsFromPatternAndDemand(pat.Pattern, residualDemand);
+                    var maxPatterns = GetMaxCutsFromPatternAndDemand(newPattern, residualDemand);
                     if (maxPatterns == 0)
                         continue;
                     anythingAddedToSolution = true;
-                    var newPD = new PatternDemand { Pattern = newPattern, Demand = maxPatterns, StockLength = pat.StockLength };
                     int demandToDeduct = 0;
                     if (pat.Demand > maxPatterns)
                     {
-                        newPattern.Items.AddRange(pat.Pattern.Items);
-                        newPatternDemands.Add(newPD);
+                        var addedPattern = new Pattern();
+                        var cuts = new List<double>(newPattern.Items);
+                        cuts.AddRange(pat.Pattern.Items);
+                        addedPattern.Items = cuts;
+                        newPatternDemands.Add(new PatternDemand { Pattern = addedPattern, Demand = maxPatterns, StockLength = pat.StockLength });
                         pat.Demand -= maxPatterns;
                         demandToDeduct = maxPatterns;
                     }
@@ -393,6 +395,8 @@ namespace CuttingStock1dGA.Models
                     DeductDemand(demandToDeduct, newPattern, residualDemand);
                 }
             }
+            foreach (var item in newPatternDemands)
+                solution.PatternDemands.Add(item);
             return anythingAddedToSolution;
         }
         Pattern FillPatternWithFFD(PatternDemand pattern, Dictionary<double, int> residualDemand)
