@@ -142,6 +142,8 @@ namespace CuttingStock1dGA.Models
                 newPatternDemands.Remove(remove);
 
             if (!IsDemandMet(residualDemand))
+                FillSolutionWithFFD(residualDemand, solution);
+            if (!IsDemandMet(residualDemand))
             {
                 var pdemands = FirstFitDecreasing(residualDemand, GetRandomMaster());
                 newPatternDemands.AddRange(pdemands);
@@ -156,7 +158,7 @@ namespace CuttingStock1dGA.Models
             foreach (var pattern in orderedPatterns)
             {
                 var comparer = new PatternComparer();
-                var nonUnique = uniquePatterns.FirstOrDefault(x => x.StockLength == pattern.StockLength && comparer.Equals(pattern.Pattern,x.Pattern));
+                var nonUnique = uniquePatterns.FirstOrDefault(x => x.StockLength == pattern.StockLength && comparer.Equals(pattern.Pattern, x.Pattern));
                 if (nonUnique == null)
                     uniquePatterns.Add(pattern);
             }
@@ -360,9 +362,44 @@ namespace CuttingStock1dGA.Models
 
             return pattern;
         }
-        List<PatternDemand> FirstFitDecreasing(Dictionary<double, int> residualDemand, double masterLength, Solution solutiong)
+        bool FillSolutionWithFFD(Dictionary<double, int> residualDemand, Solution solution)
         {
-
+            var newPatternDemands = new List<PatternDemand>();
+            bool anythingAddedToSolution = false;
+            foreach (var pat in solution.PatternDemands)
+            {
+                var newPattern = FillPatternWithFFD(pat, residualDemand); //cuts that can fit
+                if (newPattern.Items.Count > 0)
+                {
+                    
+                    var maxPatterns = GetMaxCutsFromPatternAndDemand(pat.Pattern, residualDemand);
+                    if (maxPatterns == 0)
+                        continue;
+                    anythingAddedToSolution = true;
+                    var newPD = new PatternDemand { Pattern = newPattern, Demand = maxPatterns, StockLength = pat.StockLength };
+                    int demandToDeduct = 0;
+                    if (pat.Demand > maxPatterns)
+                    {
+                        newPattern.Items.AddRange(pat.Pattern.Items);
+                        newPatternDemands.Add(newPD);
+                        pat.Demand -= maxPatterns;
+                        demandToDeduct = maxPatterns;
+                    }
+                    else
+                    {
+                        pat.Pattern.Items.AddRange(newPattern.Items);
+                        demandToDeduct = pat.Demand;
+                    }
+                    DeductDemand(demandToDeduct, newPattern, residualDemand);
+                }
+            }
+            return anythingAddedToSolution;
+        }
+        Pattern FillPatternWithFFD(PatternDemand pattern, Dictionary<double, int> residualDemand)
+        {
+            var remaining = pattern.StockLength - pattern.Pattern.Items.Sum();
+            var p = FFDGetPattern(remaining, residualDemand);
+            return p;
         }
         List<PatternDemand> FirstFitDecreasing(Dictionary<double, int> residualDemand, double masterLength)
         {
@@ -370,13 +407,8 @@ namespace CuttingStock1dGA.Models
             var solution = new Solution();
             List<PatternDemand> patternDemands = new List<PatternDemand>();
             var demandMet = false;
-            var triedToFillCurrentPatterns = false;
             while (!demandMet)
             {
-                if(!triedToFillCurrentPatterns)
-                {
-                    foreach(var pattern in _so)
-                }
                 var pattern = FFDGetPattern(masterLength, residualDemand);
                 if (pattern.Items.Count == 0)
                 {
@@ -549,7 +581,9 @@ namespace CuttingStock1dGA.Models
                     break;
                 }
             }
-
+            if(!demandIsMet)
+                FillSolutionWithFFD(residualDemand, child);
+            demandIsMet = IsDemandMet(residualDemand);
             if (!demandIsMet)
             {
                 var pdemands = FirstFitDecreasing(residualDemand, GetRandomMaster());
